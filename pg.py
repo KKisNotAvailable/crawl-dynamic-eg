@@ -95,8 +95,9 @@ def main():
     # Initialize the Chrome WebDriver with options
     driver = webdriver.Chrome(options=chrome_options)
 
-    # download_median_HH_income(driver=driver)
-    download_unemployment(driver=driver, fips="06037")
+    cur_fips = "06037"
+    # download_median_HH_income(driver=driver, fips=cur_fips)
+    download_unemployment(driver=driver, fips=cur_fips)
 
     driver.quit()
 
