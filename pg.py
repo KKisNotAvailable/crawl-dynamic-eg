@@ -4,8 +4,10 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
 import time
+import os
 import pandas as pd
 from tqdm import tqdm
+import logging
 import re
 import platform
 
@@ -20,10 +22,7 @@ COMSTAT_PATH = f"{OLD_FILES}Compustat/"
 
 VAR_PATH = EXT_DISK + "Variables/"
 
-WEBDRIVER_PATH = "/Users/kyk/Desktop/Misc/edgedriver_arm64/"
-
-
-def download_median_HH_income(driver, fips = "06037"):
+def download_median_HH_income(driver, fips, state_abbr):
     '''
     Download directly from the path, file will be "MHICA{fips}A052NCEN.csv"
     '''
@@ -33,26 +32,33 @@ def download_median_HH_income(driver, fips = "06037"):
     graph_bgcolor=%23ffffff&height=450&mode=fred
     &recession_bars=on&txtcolor=%23444444&ts=12&tts=12&width=720
     &nt=0&thu=0&trc=0&show_legend=yes&show_axis_titles=yes&show_tooltip=yes
-    &id=MHICA{fips}A052NCEN&scale=left&cosd=1989-01-01&coed=2022-01-01
+    &id=MHI{state_abbr}{fips}A052NCEN&scale=left&cosd=1989-01-01&coed=2022-01-01
     &line_color=%234572a7&link_values=false&line_style=solid&mark_type=none&mw=3
     &lw=2&ost=-99999&oet=99999&mma=0&fml=a&fq=Annual&fam=avg&fgst=lin
     &fgsnd=2020-02-01&line_index=1&transformation=lin&vintage_date=2024-11-13
     &revision_date=2024-11-13&nd=1989-01-01'''
 
+
+    # addr = f"https://fred.stlouisfed.org/series/MHI{state_abbr}{fips}A052NCEN"
+
     driver.get(addr)
 
-    # Allow some time for the page to load or download
-    time.sleep(1.5)
+    # download_button = driver.find_element(By.ID, "download-button")
+    # download_button.click()
 
-def download_unemployment(driver, fips = "48039", start_year = "2000"):
+    # Allow some time for the page to load or download
+    time.sleep(2)
+
+def download_unemployment(driver, down_path, fips = "48039", start_year = "2000"):
     '''
     Need to download files interactively, file will be "file.csv",
     so will rename it directly after download.
     '''
     addr = f"https://data.bls.gov/dataViewer/view/timeseries/LAUCN{fips}0000000004"
 
-    time.sleep(1.5)
     driver.get(addr)
+
+    time.sleep(1.5)
 
     # 1. Drop down list choose start and end year (but we fix end here)
     dropdown = Select(driver.find_element(By.ID, "dv-start-year"))
@@ -70,17 +76,30 @@ def download_unemployment(driver, fips = "48039", start_year = "2000"):
     )
     download_button.click()
 
-    # Wait for the download to complete
-    time.sleep(2)
-
     # 4. Wait until "file.csv" exist in download path, rename it
-    new_name = f"unemp_{fips}.csv"
+    while True:
+        file_path = os.path.join(down_path, 'file.csv')
+        if os.path.exists(file_path):  # Check if the file exists
+            new_file_path = os.path.join(down_path, f"unemp_{fips}.csv")
+            os.rename(file_path, new_file_path)  # Rename the file
+            break
+
+        time.sleep(1)
 
 
-def main():
+def batch_download(target: str):
+    # Configure logging
+    logging.basicConfig(
+        filename="failures.log",  # Log file name
+        level=logging.ERROR,      # Only log errors
+        format="%(message)s"      # Simple message format
+    )
+
+    # prep the fips list
+    fips_list = pd.read_csv('fips2county.tsv.txt', delimiter='\t', dtype={'CountyFIPS': 'str'})
 
     # Specify the desired download directory
-    download_dir = "/Users/kyk/Desktop/projects/scrapper/"  # Replace with your actual download path
+    download_dir = VAR_PATH + f"{target.lower()}/"
 
     # Set up Chrome options
     chrome_options = Options()
@@ -92,15 +111,42 @@ def main():
     }
     chrome_options.add_experimental_option("prefs", prefs)
 
+    # to run webdriver in the background (won't show window)
+    chrome_options.add_argument("--headless")
+
     # Initialize the Chrome WebDriver with options
-    driver = webdriver.Chrome(options=chrome_options)
+    # driver = webdriver.Chrome(options=chrome_options)
 
-    cur_fips = "06037"
-    # download_median_HH_income(driver=driver, fips=cur_fips)
-    download_unemployment(driver=driver, fips=cur_fips)
+    # TODO: open and close driver in the unemployment, but median HH income can use the same driver
 
-    driver.quit()
+    counter = 5
 
+    for cur_fips, cur_state in tqdm(
+        zip(fips_list['CountyFIPS'], fips_list['StateAbbr']),
+        total=fips_list.shape[0]
+    ):
+
+        try:
+            driver = webdriver.Chrome(options=chrome_options)
+
+            counter -= 1
+            if target.lower() == 'unemployment':
+                download_unemployment(driver=driver, fips=cur_fips, down_path=download_dir)
+            elif target.lower() == 'median_hh_income':
+                download_median_HH_income(driver=driver, fips=cur_fips, state_abbr=cur_state)
+
+            driver.quit()
+            # if counter == 0: return
+        except:
+            # pass
+            logging.error(f"{cur_fips}")
+
+    # driver.quit()
+
+
+def main():
+    batch_download('unemployment')
+    # batch_download('median_hh_income')
 
 if __name__ == '__main__':
     main()
