@@ -20,7 +20,7 @@ OLD_FILES = EXT_DISK + "2016_files/"
 DATA_PATH = f"{OLD_FILES}processed_data/"
 COMSTAT_PATH = f"{OLD_FILES}Compustat/"
 
-VAR_PATH = EXT_DISK + "Variables/"
+VAR_PATH = EXT_DISK + "Variables/raw/"
 
 def download_median_HH_income(driver, fips, state_abbr):
     '''
@@ -54,7 +54,10 @@ def download_unemployment(driver, down_path, fips = "48039", start_year = "2000"
     Need to download files interactively, file will be "file.csv",
     so will rename it directly after download.
     '''
+    # unemployment count
     addr = f"https://data.bls.gov/dataViewer/view/timeseries/LAUCN{fips}0000000004"
+    # unemployment rate
+    addr = f"https://data.bls.gov/dataViewer/view/timeseries/LAUCN{fips}0000000003#"
 
     driver.get(addr)
 
@@ -119,7 +122,8 @@ def batch_download(target: str):
 
     # TODO: open and close driver in the unemployment, but median HH income can use the same driver
 
-    counter = 5
+    # For testing
+    # fips_list = fips_list.iloc[:3, :]
 
     for cur_fips, cur_state in tqdm(
         zip(fips_list['CountyFIPS'], fips_list['StateAbbr']),
@@ -129,14 +133,12 @@ def batch_download(target: str):
         try:
             driver = webdriver.Chrome(options=chrome_options)
 
-            counter -= 1
-            if target.lower() == 'unemployment':
+            if target.lower() in ['unemployment', 'unemp_rate']:
                 download_unemployment(driver=driver, fips=cur_fips, down_path=download_dir)
             elif target.lower() == 'median_hh_income':
                 download_median_HH_income(driver=driver, fips=cur_fips, state_abbr=cur_state)
 
             driver.quit()
-            # if counter == 0: return
         except:
             # pass
             logging.error(f"{cur_fips}")
@@ -145,7 +147,7 @@ def batch_download(target: str):
 
 
 def main():
-    batch_download('unemployment')
+    batch_download('unemp_rate')
     # batch_download('median_hh_income')
 
 if __name__ == '__main__':
